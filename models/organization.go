@@ -6,7 +6,12 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"fmt"
+	"strconv"
 
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"database/sql/driver"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -258,9 +263,9 @@ const (
 	OrgStatusDeleted   OrgStatus = "deleted"
 )
 
-func (s UserStatus) IsValid() bool {
+func (s OrgStatus) IsValid() bool {
 	switch s {
-	case UserStatusActive, UserStatusInactive, UserStatusSuspended, UserStatusDeleted:
+	case OrgStatusActive, OrgStatusInactive, OrgStatusSuspended, OrgStatusDeleted:
 		return true
 	}
 	return false
@@ -293,7 +298,7 @@ func (s *UserStatus) Scan(value interface{}) error {
 		return fmt.Errorf("cannot scan %T into UserStatus", value)
 	}
 	
-	if !s.Valid() {
+	if !s.IsValid() {
 		return fmt.Errorf("invalid UserStatus: %s", *s)
 	}
 	
@@ -326,19 +331,21 @@ func validateOrganizationCreateRequest(req OrganizationCreate) error {
 }
 
 type Organization struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Email       string    `json:"email"`
-	Status      OrgStatus `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastUpdated time.Time `json:"last_updated"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+    ID          *FlexibleID `json:"id" bson:"_id"`
+    Name        string      `json:"name" bson:"name"`
+    Email       string      `json:"email" bson:"email"`
+    Password    string      `json:"-" bson:"password"` 
+    Status      OrgStatus   `json:"status" bson:"status"`
+    CreatedAt   time.Time   `json:"created_at" bson:"created_at"`
+    LastUpdated time.Time   `json:"last_updated" bson:"last_updated"`
+    DeletedAt   *time.Time  `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
 }
 
 type OrganizationCreate struct {
 	Name        string    `json:"name" validate:"required,min=3,max=100"`
 	Email       string    `json:"email" validate:"required,email"`
 	Status      OrgStatus `json:"status" validate:"required,oneof=active inactive suspended deleted"`
+	Password    string    `json:"password" validate:"required,min=8"`
 	CreatedAt   time.Time `json:"created_at"`
 	LastUpdated time.Time `json:"last_updated"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
@@ -348,6 +355,7 @@ type OrganizationUpdate struct {
 	Name        *string   `json:"name,omitempty" validate:"omitempty,min=3,max=100"`
 	Email       *string   `json:"email,omitempty" validate:"omitempty,email"`
 	Status      *OrgStatus `json:"status,omitempty" validate:"omitempty,oneof=active inactive suspended deleted"`
+	Password    *string   `json:"password,omitempty" validate:"omitempty,min=8"`
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	LastUpdated *time.Time `json:"last_updated,omitempty"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
@@ -357,6 +365,7 @@ type OrganizationResponse struct {
 	ID          interface{} `json:"id"`
 	Name        string      `json:"name"`
 	Email       string      `json:"email"`
+	Password    string      `json:"password"`
 	Status      OrgStatus   `json:"status"`
 	CreatedAt   time.Time   `json:"created_at"`
 	LastUpdated time.Time   `json:"last_updated"`
@@ -409,7 +418,7 @@ func (o *Organization) SetSerialID(id int64) {
 	o.ID = FromSerialID(id)
 }
 
-func (o *Organization) GetIDString() *FlexibleID {
+func (o *Organization) GetIDString() string {
 	if o.ID == nil || o.ID.IsEmpty() {
 		return ""
 	}
