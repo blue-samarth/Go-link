@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"gorm.io/gorm"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"database/sql/driver"
@@ -337,14 +338,15 @@ func validateOrganizationCreateRequest(req OrganizationCreate) error {
 }
 
 type Organization struct {
-    ID          *FlexibleID `json:"id" bson:"_id"`
-    Name        string      `json:"name" bson:"name"`
-    Email       string      `json:"email" bson:"email"`
-    Password    string      `json:"-" bson:"password"` 
-    Status      OrgStatus   `json:"status" bson:"status"`
-    CreatedAt   time.Time   `json:"created_at" bson:"created_at"`
-    LastUpdated time.Time   `json:"last_updated" bson:"last_updated"`
-    DeletedAt   *time.Time  `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
+	ID          *FlexibleID `json:"id" bson:"_id" gorm:"-"`
+	SerialID    *int64      `json:"-" gorm:"column:id;primaryKey;autoIncrement"`
+	Name        string      `json:"name" bson:"name" gorm:"column:name;size:100;not null"`
+	Email       string      `json:"email" bson:"email" gorm:"column:email;unique;not null"`
+	Password    string      `json:"-" bson:"password" gorm:"column:password;not null"`
+	Status      OrgStatus   `json:"status" bson:"status" gorm:"column:status;type:varchar(20);not null"`
+	CreatedAt   time.Time   `json:"created_at" bson:"created_at" gorm:"column:created_at;autoCreateTime"`
+	LastUpdated time.Time   `json:"last_updated" bson:"last_updated" gorm:"column:last_updated;autoUpdateTime"`
+	DeletedAt   *time.Time  `json:"deleted_at,omitempty" bson:"deleted_at,omitempty" gorm:"column:deleted_at"`
 }
 
 type OrganizationCreate struct {
@@ -380,38 +382,40 @@ type OrganizationResponse struct {
 
 
 func NewOrganization(req OrganizationCreate, idType IdType, serialID ...int64) (*Organization, error) {
-    if err := validateOrganizationCreateRequest(req); err != nil {
-        return nil, err
-    }
-    
-    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-    if err != nil {
-        return nil, fmt.Errorf("failed to hash password: %w", err)
-    }
-    org := &Organization{
-        Name:        req.Name,
-        Email:       req.Email,
-        Password:    string(hashedPassword),
-        Status:      req.Status,
-        CreatedAt:   req.CreatedAt,
-        LastUpdated: req.LastUpdated,
+	if err := validateOrganizationCreateRequest(req); err != nil {
+		return nil, err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	org := &Organization{
+		Name:        req.Name,
+		Email:       req.Email,
+		Password:    string(hashedPassword),
+		Status:      req.Status,
+		CreatedAt:   req.CreatedAt,
+		LastUpdated: req.LastUpdated,
 		DeletedAt:   req.DeletedAt,
-    }
-    
-    switch idType {
-    case MongoIdType:
-        org.ID = NewMongoID()
-    case SerialIdType:
-        if len(serialID) > 0 {
-            org.ID = NewSerialID(serialID[0])
-        } else {
-            return nil, errors.New("serial ID required for SerialIdType")
-        }
-    default:
-        return nil, errors.New("invalid ID type")
-    }
-    
-    return org, nil
+	}
+
+	switch idType {
+	case MongoIdType:
+		org.ID = NewMongoID()
+	case SerialIdType:
+		if len(serialID) > 0 {
+			org.ID = NewSerialID(serialID[0])
+			org.SerialID = &serialID[0] // sync SQL ID field
+		} else {
+			return nil, errors.New("serial ID required for SerialIdType")
+		}
+	default:
+		return nil, errors.New("invalid ID type")
+	}
+
+	return org, nil
 }
 
 func NewOrganizationForMongo(req OrganizationCreate) (*Organization, error) {
