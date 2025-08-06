@@ -382,15 +382,14 @@ func NewOrganization(req OrganizationCreate, idType IdType, serialID ...int64) (
     if err != nil {
         return nil, fmt.Errorf("failed to hash password: %w", err)
     }
-
-    now := time.Now()
     org := &Organization{
         Name:        req.Name,
         Email:       req.Email,
         Password:    string(hashedPassword),
         Status:      req.Status,
-        CreatedAt:   now,
-        LastUpdated: now,
+        CreatedAt:   req.CreatedAt,
+        LastUpdated: req.LastUpdated,
+		DeletedAt:   req.DeletedAt,
     }
     
     switch idType {
@@ -417,30 +416,48 @@ func NewOrganizationForSQL(req OrganizationCreate, id ...int64) (*Organization, 
     return NewOrganization(req, SerialIdType, id...)
 }
 
-func (o *Organization) SetMongoID(id primitive.ObjectID) {
+func (o *Organization) SetMongoID(id primitive.ObjectID) {\
+	if o == nil {
+		return
+	}
 	o.ID = FromMongoID(id)
 }
 
 func (o *Organization) SetSerialID(id int64) {
+	if o == nil {
+		return
+	}
 	o.ID = FromSerialID(id)
 }
 
 func (o *Organization) GetIDString() string {
-	if o.ID == nil || o.ID.IsEmpty() {
+    if o == nil {
+        return ""
+    }
+	if o.ID == nil {
 		return ""
 	}
 	return o.ID.String()
 }
 
 func (o *Organization) IsMongoID() bool {
+    if o == nil || o.ID == nil {
+        return false
+    }
 	return o.ID.Type == MongoIdType && o.ID.MongoID != nil
 }
 
 func (o *Organization) IsSerialID() bool {
+	if o == nil || o.ID == nil {
+		return false
+	}
 	return o.ID.Type == SerialIdType && o.ID.SerialID != nil
 }
 
 func (o *Organization) SetPassword(password string) error {
+	if o == nil {
+		return errors.New("organization cannot be nil")
+	}
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
 	}
@@ -462,6 +479,9 @@ func (o *Organization) CheckPassword(password string) bool {
 }
 
 func (o *Organization) ActivateOrganization() {
+	if o == nil {
+		return
+	}
 	o.Status = OrgStatusActive
 	o.LastUpdated = time.Now()
 }
@@ -485,26 +505,27 @@ func (o *Organization) SoftDeleteOrganization() {
 
 
 func (o *Organization) ToResponse() *OrganizationResponse {
-	var id FlexibleID
-	if o.ID != nil && !o.ID.IsEmpty() {
-		id = o.ID.GetValue()
-		if id.Type == MongoIdType && id.MongoID != nil {
-			id = id.MongoID.Hex()
-		} else if id.Type == SerialIdType && id.SerialID != nil {
-			id = *id.SerialID
-		}
+	if o == nil {
+		return nil
 	}
-
-	return &OrganizationResponse{
-		ID:          id,
-		Name:        o.Name,
-		Email:       o.Email,
-		// Password:    o.Password, 
-		Status:      o.Status,
-		CreatedAt:   o.CreatedAt,
-		LastUpdated: o.LastUpdated,
-		DeletedAt:   o.DeletedAt,
-	}
+    var id interface{}
+    if o.ID != nil && !o.ID.IsEmpty() {
+        if o.ID.Type == MongoIdType && o.ID.MongoID != nil {
+            id = o.ID.MongoID.Hex()
+        } else if o.ID.Type == SerialIdType && o.ID.SerialID != nil {
+            id = *o.ID.SerialID
+        }
+    }
+    
+    return &OrganizationResponse{
+        ID:          id,
+        Name:        o.Name,
+        Email:       o.Email,
+        Status:      o.Status,
+        CreatedAt:   o.CreatedAt,
+        LastUpdated: o.LastUpdated,
+        DeletedAt:   o.DeletedAt,
+    }
 }
 
 func (Organization) TableName() string {
@@ -514,11 +535,14 @@ func (Organization) CollectionName() string {
 	return "organizations"
 }
 func (o *Organization) BeforeUpdate() {
-	o.LastUpdated = time.Now()
-	if o.Status == OrgStatusDeleted {
-		now := time.Now()
-		o.DeletedAt = &now
-	} else {
-		o.DeletedAt = nil
+	if o == nil {
+		return
 	}
+    now := time.Now()
+    o.LastUpdated = now
+    if o.Status == OrgStatusDeleted {
+        o.DeletedAt = &now
+    } else {
+        o.DeletedAt = nil
+    }
 }
