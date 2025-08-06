@@ -1,31 +1,35 @@
 package models
 
 import (
-	"time"
 	"encoding/json"
 	"errors"
-	"regexp"
-	"strings"
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
-	"gorm.io/gorm"
+	"database/sql/driver"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"database/sql/driver"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9](\.?[a-zA-Z0-9_\-+%]){0,63}@[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$`)
+
+
 type IdType string
+
 const (
 	MongoIdType  IdType = "mongo"
 	SerialIdType IdType = "serial"
 )
 
 type FlexibleID struct {
-	Type     IdType               `json:"type" bson:"type"`
-	MongoID  *primitive.ObjectID  `json:"mongo_id,omitempty" bson:"mongo_id,omitempty"`
-	SerialID *int64               `json:"serial_id,omitempty" bson:"serial_id,omitempty"`
+	Type     IdType              `json:"type" bson:"type"`
+	MongoID  *primitive.ObjectID `json:"mongo_id,omitempty" bson:"mongo_id,omitempty"`
+	SerialID *int64              `json:"serial_id,omitempty" bson:"serial_id,omitempty"`
 }
 
 func NewMongoID() *FlexibleID {
@@ -43,7 +47,6 @@ func FromMongoID(id primitive.ObjectID) *FlexibleID {
 	}
 }
 
-
 func NewSerialID(id int64) *FlexibleID {
 	return &FlexibleID{
 		Type:     SerialIdType,
@@ -58,12 +61,11 @@ func FromSerialID(id int64) *FlexibleID {
 	}
 }
 
-
 func (f *FlexibleID) String() string {
 	if f == nil {
 		return ""
 	}
-	
+
 	switch f.Type {
 	case MongoIdType:
 		if f.MongoID != nil {
@@ -81,7 +83,7 @@ func (f *FlexibleID) IsEmpty() bool {
 	if f == nil {
 		return true
 	}
-	
+
 	switch f.Type {
 	case MongoIdType:
 		return f.MongoID == nil || f.MongoID.IsZero()
@@ -95,7 +97,7 @@ func (f *FlexibleID) GetValue() interface{} {
 	if f == nil {
 		return nil
 	}
-	
+
 	switch f.Type {
 	case MongoIdType:
 		if f.MongoID != nil {
@@ -130,7 +132,7 @@ func (f *FlexibleID) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}
-	
+
 	switch v := value.(type) {
 	case int64:
 		f.Type = SerialIdType
@@ -151,7 +153,7 @@ func (f *FlexibleID) Scan(value interface{}) error {
 	default:
 		return fmt.Errorf("cannot scan %T into FlexibleID", value)
 	}
-	
+
 	return nil
 }
 
@@ -159,7 +161,7 @@ func (f *FlexibleID) MarshalJSON() ([]byte, error) {
 	if f.IsEmpty() {
 		return json.Marshal(nil)
 	}
-	
+
 	return json.Marshal(map[string]interface{}{
 		"type":  f.Type,
 		"value": f.String(),
@@ -174,23 +176,23 @@ func (f *FlexibleID) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	
+
 	if raw == nil {
 		return nil
 	}
-	
+
 	typeStr, ok := raw["type"].(string)
 	if !ok {
 		return fmt.Errorf("invalid type in FlexibleID")
 	}
-	
+
 	value, ok := raw["value"].(string)
 	if !ok {
 		return fmt.Errorf("invalid value in FlexibleID")
 	}
-	
+
 	f.Type = IdType(typeStr)
-	
+
 	switch f.Type {
 	case MongoIdType:
 		id, err := primitive.ObjectIDFromHex(value)
@@ -205,7 +207,7 @@ func (f *FlexibleID) UnmarshalJSON(data []byte) error {
 		}
 		f.SerialID = &id
 	}
-	
+
 	return nil
 }
 
@@ -213,7 +215,7 @@ func (f *FlexibleID) MarshalBSONValue() (bson.ValueType, []byte, error) {
 	if f == nil || f.IsEmpty() {
 		return bson.TypeNull, nil, nil
 	}
-	
+
 	switch f.Type {
 	case MongoIdType:
 		if f.MongoID != nil {
@@ -224,7 +226,7 @@ func (f *FlexibleID) MarshalBSONValue() (bson.ValueType, []byte, error) {
 			return bson.MarshalValue(*f.SerialID)
 		}
 	}
-	
+
 	return bson.TypeNull, nil, nil
 }
 
@@ -255,11 +257,12 @@ func (f *FlexibleID) UnmarshalBSONValue(t bson.ValueType, data []byte) error {
 	default:
 		return fmt.Errorf("cannot unmarshal %v into FlexibleID", t)
 	}
-	
+
 	return nil
 }
 
 type OrgStatus string
+
 const (
 	OrgStatusActive    OrgStatus = "active"
 	OrgStatusInactive  OrgStatus = "inactive"
@@ -279,8 +282,7 @@ func (email *string) IsValidEmail() bool {
 	if email == nil || *email == "" {
 		return false
 	}
-	re := regexp.MustCompile(`^[a-zA-Z0-9](\.?[a-zA-Z0-9_\-+%]){0,63}@[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$`)
-	return re.MatchString(*email)
+	return emailRegex.MatchString(*email)
 }
 
 func (s OrgStatus) Value() (driver.Value, error) {
@@ -295,7 +297,7 @@ func (s *OrgStatus) Scan(value interface{}) error {
 		*s = OrgStatusInactive
 		return nil
 	}
-	
+
 	switch v := value.(type) {
 	case string:
 		*s = OrgStatus(v)
@@ -304,11 +306,11 @@ func (s *OrgStatus) Scan(value interface{}) error {
 	default:
 		return fmt.Errorf("cannot scan %T into OrgStatus", value)
 	}
-	
+
 	if !s.IsValid() {
 		return fmt.Errorf("invalid OrgStatus: %s", *s)
 	}
-	
+
 	return nil
 }
 
@@ -350,36 +352,35 @@ type Organization struct {
 }
 
 type OrganizationCreate struct {
-	Name        string    `json:"name" validate:"required,min=3,max=100"`
-	Email       string    `json:"email" validate:"required,email"`
-	Status      OrgStatus `json:"status" validate:"required,oneof=active inactive suspended deleted"`
-	Password    string    `json:"password" validate:"required,min=8"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastUpdated time.Time `json:"last_updated"`
+	Name        string     `json:"name" validate:"required,min=3,max=100"`
+	Email       string     `json:"email" validate:"required,email"`
+	Status      OrgStatus  `json:"status" validate:"required,oneof=active inactive suspended deleted"`
+	Password    string     `json:"password" validate:"required,min=8"`
+	CreatedAt   time.Time  `json:"created_at"`
+	LastUpdated time.Time  `json:"last_updated"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
 
 type OrganizationUpdate struct {
-	Name        *string   `json:"name,omitempty" validate:"omitempty,min=3,max=100"`
-	Email       *string   `json:"email,omitempty" validate:"omitempty,email"`
+	Name        *string    `json:"name,omitempty" validate:"omitempty,min=3,max=100"`
+	Email       *string    `json:"email,omitempty" validate:"omitempty,email"`
 	Status      *OrgStatus `json:"status,omitempty" validate:"omitempty,oneof=active inactive suspended deleted"`
-	Password    *string   `json:"password,omitempty" validate:"omitempty,min=8"`
+	Password    *string    `json:"password,omitempty" validate:"omitempty,min=8"`
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	LastUpdated *time.Time `json:"last_updated,omitempty"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
 
 type OrganizationResponse struct {
-	ID          interface{} `json:"id"`
-	Name        string      `json:"name"`
-	Email       string      `json:"email"`
+	ID    interface{} `json:"id"`
+	Name  string      `json:"name"`
+	Email string      `json:"email"`
 	// Password    string      `json:"password"`
-	Status      OrgStatus   `json:"status"`
-	CreatedAt   time.Time   `json:"created_at"`
-	LastUpdated time.Time   `json:"last_updated"`
-	DeletedAt   *time.Time  `json:"deleted_at,omitempty"`
+	Status      OrgStatus  `json:"status"`
+	CreatedAt   time.Time  `json:"created_at"`
+	LastUpdated time.Time  `json:"last_updated"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
-
 
 func NewOrganization(req OrganizationCreate, idType IdType, serialID ...int64) (*Organization, error) {
 	if err := validateOrganizationCreateRequest(req); err != nil {
@@ -423,7 +424,7 @@ func NewOrganizationForMongo(req OrganizationCreate) (*Organization, error) {
 }
 
 func NewOrganizationForSQL(req OrganizationCreate, id ...int64) (*Organization, error) {
-    return NewOrganization(req, SerialIdType, id...)
+	return NewOrganization(req, SerialIdType, id...)
 }
 
 func (o *Organization) SetMongoID(id primitive.ObjectID) {
@@ -441,9 +442,9 @@ func (o *Organization) SetSerialID(id int64) {
 }
 
 func (o *Organization) GetIDString() string {
-    if o == nil {
-        return ""
-    }
+	if o == nil {
+		return ""
+	}
 	if o.ID == nil {
 		return ""
 	}
@@ -451,9 +452,9 @@ func (o *Organization) GetIDString() string {
 }
 
 func (o *Organization) IsMongoID() bool {
-    if o == nil || o.ID == nil {
-        return false
-    }
+	if o == nil || o.ID == nil {
+		return false
+	}
 	return o.ID.Type == MongoIdType && o.ID.MongoID != nil
 }
 
@@ -525,29 +526,28 @@ func (o *Organization) SoftDeleteOrganization() {
 	o.LastUpdated = now
 }
 
-
 func (o *Organization) ToResponse() *OrganizationResponse {
 	if o == nil {
 		return nil
 	}
-    var id interface{}
-    if o.ID != nil && !o.ID.IsEmpty() {
-        if o.ID.Type == MongoIdType && o.ID.MongoID != nil {
-            id = o.ID.MongoID.Hex()
-        } else if o.ID.Type == SerialIdType && o.ID.SerialID != nil {
-            id = *o.ID.SerialID
-        }
-    }
-    
-    return &OrganizationResponse{
-        ID:          id,
-        Name:        o.Name,
-        Email:       o.Email,
-        Status:      o.Status,
-        CreatedAt:   o.CreatedAt,
-        LastUpdated: o.LastUpdated,
-        DeletedAt:   o.DeletedAt,
-    }
+	var id interface{}
+	if o.ID != nil && !o.ID.IsEmpty() {
+		if o.ID.Type == MongoIdType && o.ID.MongoID != nil {
+			id = o.ID.MongoID.Hex()
+		} else if o.ID.Type == SerialIdType && o.ID.SerialID != nil {
+			id = *o.ID.SerialID
+		}
+	}
+
+	return &OrganizationResponse{
+		ID:          id,
+		Name:        o.Name,
+		Email:       o.Email,
+		Status:      o.Status,
+		CreatedAt:   o.CreatedAt,
+		LastUpdated: o.LastUpdated,
+		DeletedAt:   o.DeletedAt,
+	}
 }
 
 func (Organization) TableName() string {
@@ -560,11 +560,11 @@ func (o *Organization) BeforeUpdate() {
 	if o == nil {
 		return
 	}
-    now := time.Now()
-    o.LastUpdated = now
-    if o.Status == OrgStatusDeleted {
-        o.DeletedAt = &now
-    } else {
-        o.DeletedAt = nil
-    }
+	now := time.Now()
+	o.LastUpdated = now
+	if o.Status == OrgStatusDeleted {
+		o.DeletedAt = &now
+	} else {
+		o.DeletedAt = nil
+	}
 }
