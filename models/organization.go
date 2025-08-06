@@ -166,6 +166,9 @@ func (f *FlexibleID) MarshalJSON() ([]byte, error) {
 }
 
 func (f *FlexibleID) UnmarshalJSON(data []byte) error {
+	if f == nil {
+		return errors.New("cannot unmarshal into nil FlexibleID")
+	}
 	var raw map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -284,6 +287,9 @@ func (s OrgStatus) Value() (driver.Value, error) {
 }
 
 func (s *OrgStatus) Scan(value interface{}) error {
+	if s == nil {
+		return errors.New("cannot scan into nil OrgStatus")
+	}
 	if value == nil {
 		*s = OrgStatusInactive
 		return nil
@@ -416,7 +422,7 @@ func NewOrganizationForSQL(req OrganizationCreate, id ...int64) (*Organization, 
     return NewOrganization(req, SerialIdType, id...)
 }
 
-func (o *Organization) SetMongoID(id primitive.ObjectID) {\
+func (o *Organization) SetMongoID(id primitive.ObjectID) {
 	if o == nil {
 		return
 	}
@@ -471,6 +477,9 @@ func (o *Organization) SetPassword(password string) error {
 }
 
 func (o *Organization) CheckPassword(password string) bool {
+	if o == nil {
+		return false
+	}
 	if o.Password == "" {
 		return false
 	}
@@ -487,16 +496,25 @@ func (o *Organization) ActivateOrganization() {
 }
 
 func (o *Organization) DeactivateOrganization() {
+	if o == nil {
+		return
+	}
 	o.Status = OrgStatusInactive
 	o.LastUpdated = time.Now()
 }
 
 func (o *Organization) SuspendOrganization() {
+	if o == nil {
+		return
+	}
 	o.Status = OrgStatusSuspended
 	o.LastUpdated = time.Now()
 }
 
 func (o *Organization) SoftDeleteOrganization() {
+	if o == nil {
+		return
+	}
 	now := time.Now()
 	o.Status = OrgStatusDeleted
 	o.DeletedAt = &now
