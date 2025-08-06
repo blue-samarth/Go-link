@@ -279,27 +279,27 @@ func (email *string) IsValidEmail() bool {
 	return re.MatchString(*email)
 }
 
-func (s UserStatus) Value() (driver.Value, error) {
+func (s OrgStatus) Value() (driver.Value, error) {
 	return string(s), nil
 }
 
-func (s *UserStatus) Scan(value interface{}) error {
+func (s *OrgStatus) Scan(value interface{}) error {
 	if value == nil {
-		*s = UserStatusInactive
+		*s = OrgStatusInactive
 		return nil
 	}
 	
 	switch v := value.(type) {
 	case string:
-		*s = UserStatus(v)
+		*s = OrgStatus(v)
 	case []byte:
-		*s = UserStatus(v)
+		*s = OrgStatus(v)
 	default:
-		return fmt.Errorf("cannot scan %T into UserStatus", value)
+		return fmt.Errorf("cannot scan %T into OrgStatus", value)
 	}
 	
 	if !s.IsValid() {
-		return fmt.Errorf("invalid UserStatus: %s", *s)
+		return fmt.Errorf("invalid OrgStatus: %s", *s)
 	}
 	
 	return nil
@@ -309,7 +309,7 @@ func validateOrganizationCreateRequest(req OrganizationCreate) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return errors.New("name is required")
 	}
-	if !isValidEmail(req.Email) {
+	if !(&req.Email).IsValidEmail() {
 		return errors.New("invalid email format")
 	}
 	if req.Status == "" || !req.Status.IsValid() {
@@ -365,7 +365,7 @@ type OrganizationResponse struct {
 	ID          interface{} `json:"id"`
 	Name        string      `json:"name"`
 	Email       string      `json:"email"`
-	Password    string      `json:"password"`
+	// Password    string      `json:"password"`
 	Status      OrgStatus   `json:"status"`
 	CreatedAt   time.Time   `json:"created_at"`
 	LastUpdated time.Time   `json:"last_updated"`
@@ -373,41 +373,48 @@ type OrganizationResponse struct {
 }
 
 
-func NewOrganization(name, email string, status OrgStatus, idType IdType, serialID ...int64) (*Organization, error) {
-	if err := validateOrganizationCreateRequest(req); err != nil {
-		return nil, err
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
-	}
+func NewOrganization(req OrganizationCreate, idType IdType, serialID ...int64) (*Organization, error) {
+    if err := validateOrganizationCreateRequest(req); err != nil {
+        return nil, err
+    }
+    
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+    if err != nil {
+        return nil, fmt.Errorf("failed to hash password: %w", err)
+    }
 
-	now := time.Now()
-	return &Organization{
-		ID:          primitive.NewObjectID().Hex(),
-		Name:        name,
-		Email:       email,
-		Status:      status,
-		CreatedAt:   now,
-		LastUpdated: now,
-	}, nil
-
-	switch IdType {
-	case MongoIDType:
-		user.ID = NewMongoID()
-	case SerialIDType:
-		if len(serialID) > 0 {
-			user.ID = NewSerialID(serialID[0])
-		}
-	}
+    now := time.Now()
+    org := &Organization{
+        Name:        req.Name,
+        Email:       req.Email,
+        Password:    string(hashedPassword),
+        Status:      req.Status,
+        CreatedAt:   now,
+        LastUpdated: now,
+    }
+    
+    switch idType {
+    case MongoIdType:
+        org.ID = NewMongoID()
+    case SerialIdType:
+        if len(serialID) > 0 {
+            org.ID = NewSerialID(serialID[0])
+        } else {
+            return nil, errors.New("serial ID required for SerialIdType")
+        }
+    default:
+        return nil, errors.New("invalid ID type")
+    }
+    
+    return org, nil
 }
 
 func NewOrganizationForMongo(req OrganizationCreate) (*Organization, error) {
-	return NewOrganization(req.Name, req.Email, req.Status, MongoIdType)
+	return NewOrganization(req, MongoIdType)
 }
 
 func NewOrganizationForSQL(req OrganizationCreate, id ...int64) (*Organization, error) {
-	return NewOrganization(req.Name, req.Email, req.Status, SerialIdType, id...)
+    return NewOrganization(req, SerialIdType, id...)
 }
 
 func (o *Organization) SetMongoID(id primitive.ObjectID) {
@@ -426,11 +433,11 @@ func (o *Organization) GetIDString() string {
 }
 
 func (o *Organization) IsMongoID() bool {
-	return o.ID.Type == MongoIdType && o.ID.Type == MongoIdType && o.ID.MongoID != nil
+	return o.ID.Type == MongoIdType && o.ID.MongoID != nil
 }
 
 func (o *Organization) IsSerialID() bool {
-	return o.ID.Type == SerialIdType && o.ID.Type == SerialIdType && o.ID.SerialID != nil
+	return o.ID.Type == SerialIdType && o.ID.SerialID != nil
 }
 
 func (o *Organization) SetPassword(password string) error {
@@ -478,7 +485,7 @@ func (o *Organization) SoftDeleteOrganization() {
 
 
 func (o *Organization) ToResponse() *OrganizationResponse {
-	var id interface{}
+	var id FlexibleID
 	if o.ID != nil && !o.ID.IsEmpty() {
 		id = o.ID.GetValue()
 		if id.Type == MongoIdType && id.MongoID != nil {
@@ -492,6 +499,7 @@ func (o *Organization) ToResponse() *OrganizationResponse {
 		ID:          id,
 		Name:        o.Name,
 		Email:       o.Email,
+		// Password:    o.Password, 
 		Status:      o.Status,
 		CreatedAt:   o.CreatedAt,
 		LastUpdated: o.LastUpdated,
