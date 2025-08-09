@@ -37,6 +37,8 @@ var (
 	shutdownOnce sync.Once
 	cancelFunc   context.CancelFunc
 	mu           sync.RWMutex
+
+	cfg       *config.AppConfig
 )
 
 // customLevelEncoder adds color to log levels for console output
@@ -182,19 +184,33 @@ func Logger() *zap.Logger {
 }
 
 // Async logging API
-func Log(level zapcore.Level, msg string, fields ...zap.Field) {
-	if logger == nil {
-		return
-	}
-	entry := zapcore.Entry{
-		Level:   level,
-		Time:    time.Now(),
-		Message: msg,
-	}
-	select {
-	case logBuffer <- entry:
-	default:
-		// Buffer full, drop oldest or warn
-		fmt.Fprintf(os.Stderr, "log buffer full, dropping log: %s\n", msg)
-	}
+func Log(level zapcore.Level, msg string, allowedModes []string, fields ...zap.Field) {
+    if logger == nil {
+        return
+    }
+
+    // Read current mode from environment
+    currentMode := strings.ToLower(cfg.LogConfig.LogMode)
+
+    allowed := false
+    for _, m := range allowedModes {
+        if strings.ToLower(m) == currentMode {
+            allowed = true
+            break
+        }
+    }
+    if !allowed {
+        return 
+    }
+
+    entry := zapcore.Entry{
+        Level:   level,
+        Time:    time.Now(),
+        Message: msg,
+    }
+    select {
+    case logBuffer <- entry:
+    default:
+        fmt.Fprintf(os.Stderr, "log buffer full, dropping log: %s\n", msg)
+    }
 }
