@@ -108,6 +108,9 @@ func InitLogger(cfg LoggerConfig) error {
 			encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
 		}
 
+		// Use custom caller encoder to show package and module
+		encoderCfg.EncodeCaller = customCallerEncoder
+
 		core := zapcore.NewCore(zapcore.NewConsoleEncoder(encoderCfg), ws, level)
 		logger = zap.New(core, zap.AddCaller())
 
@@ -125,6 +128,7 @@ func InitLogger(cfg LoggerConfig) error {
 	})
 	return initErr
 }
+
 
 func flushWorker(ctx context.Context, interval time.Duration, core zapcore.Core) {
 	ticker := time.NewTicker(interval)
@@ -183,13 +187,33 @@ func Logger() *zap.Logger {
 	return logger
 }
 
+func customCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+	funcName := caller.Function // e.g. github.com/yourorg/pkg.module.Func
+
+	// Extract last part after slash
+	parts := strings.Split(funcName, "/")
+	lastPart := parts[len(parts)-1] // pkg.module.Func
+
+	// Split by '.' to get package and module
+	subParts := strings.Split(lastPart, ".")
+
+	pkgName, moduleName := "", ""
+	if len(subParts) >= 2 {
+		pkgName = subParts[0]
+		moduleName = subParts[1]
+	} else if len(subParts) == 1 {
+		pkgName = subParts[0]
+	}
+
+	enc.AppendString(fmt.Sprintf("%s %s %s:%d", pkgName, moduleName, caller.File, caller.Line))
+}
+
 // Async logging API
 func Log(level zapcore.Level, msg string, allowedModes []string, fields ...zap.Field) {
     if logger == nil {
         return
     }
 
-    // Read current mode from environment
     currentMode := strings.ToLower(cfg.LogConfig.LogMode)
 
     allowed := false
