@@ -3,21 +3,41 @@ APP_PORT=8080
 ENV=development
 
 # Security configuration
-JWT_SECRET_KEY=your_jwt_secret_key_here
-REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
+JWT_SECRET_KEY=your_very_long_secret_key_at_least_32_chars
+REFRESH_TOKEN_SECRET=your_refresh_token_secret_at_least_32_chars
 JWT_EXPIRY_MINUTES=60
 
 # Rate limiting
 RATE_LIMIT=100
 
-# Database configuration (PostgreSQL)
+# Database selection: postgres, mysql, mssql, sqlite, mongodb
 DB_TYPE=postgres
+
+# Relational database configuration
 DB_HOST=localhost
-DB_PORT=3001
-DB_USER=admin
+DB_PORT=5432
+DB_USER=Admin
 DB_PASS=Admin123
-DB_NAME=app_db
+DB_NAME=dbname
 SSL_MODE=disable
 
-# Logging
+# MongoDB configuration
+MONGO_HOST=localhost
+MONGO_PORT=27017
+MONGO_USER=admin
+MONGO_PASS=changeme
+MONGO_DB_NAME=app_db
+REPLICA_SET=
+MONGO_CONNECTION_STRING=
+
+# Logging configuration
 LOG_LEVEL=info
+LOG_MODE=dev
+LOG_FILE=
+ENABLE_ROTATION=false
+ROTATION_MAX_SIZE=100
+ROTATION_MAX_BACKUPS=10
+ROTATION_MAX_AGE=30
+ROTATION_COMPRESS=true
+LOG_BUFFER_SIZE=1000
+LOG_FLUSH_INTERVAL=5

@@ -51,6 +51,21 @@ type MongoConfig struct {
 	ConnectionString string `yaml:"connection_string" env:"MONGO_CONNECTION_STRING" env-default:""`
 }
 
+
+type LogConfig struct {
+	LogLevel         string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`       // Log level (debug, info, warn, error)
+	LogMode          string `yaml:"log_mode" env:"LOG_MODE" env-default:"dev"`          // Logging mode: dev, prod, minimal
+	LogFile          string `yaml:"log_file" env:"LOG_FILE" env-default:""`             // Log file path (empty = stdout/stderr)
+	EnableRotation   bool   `yaml:"enable_rotation" env:"ENABLE_ROTATION" env-default:"false"`
+	RotationMaxSize  int    `yaml:"rotation_max_size" env:"ROTATION_MAX_SIZE" env-default:"100"`       // Max size in MB before rotation
+	RotationMaxBackups int  `yaml:"rotation_max_backups" env:"ROTATION_MAX_BACKUPS" env-default:"10"`  // Max number of backup files to keep
+	RotationMaxAge   int    `yaml:"rotation_max_age" env:"ROTATION_MAX_AGE" env-default:"30"`          // Max age of log files in days
+	RotationCompress bool   `yaml:"rotation_compress" env:"ROTATION_COMPRESS" env-default:"true"`      // Compress rotated files
+	LogBufferSize    int    `yaml:"log_buffer_size" env:"LOG_BUFFER_SIZE" env-default:"1000"`          // Buffer size for async logging
+	LogFlushInterval int    `yaml:"log_flush_interval" env:"LOG_FLUSH_INTERVAL" env-default:"5"`      // Flush interval in seconds
+}
+
+
 type AppConfig struct {
 	// Server configuration
 	AppPort int    `yaml:"app_port" env:"APP_PORT" env-default:"8080"`
@@ -70,7 +85,7 @@ type AppConfig struct {
 	MongoConfig *MongoConfig `yaml:"mongodb" omitempty:"true"`
 
 	// Logging
-	LogLevel string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"` // Log level (debug, info, warn, error)
+	LogConfig LogConfig `yaml:"logging" env-required:"true"`
 }
 
 func validatePort(port int, name string, checkAvailability bool) error {
@@ -133,6 +148,16 @@ func (cfg *AppConfig) Validate() error {
 		}
 	}
 
+	if cfg.LogConfig.EnableRotation && cfg.LogConfig.LogFile == "" {
+		return fmt.Errorf("LOG_FILE must be set when ENABLE_ROTATION is true")
+	}
+	if cfg.LogConfig.RotationMaxSize <= 0 {
+		return fmt.Errorf("ROTATION_MAX_SIZE must be greater than 0")
+	}
+	if cfg.LogConfig.LogFlushInterval <= 0 {
+		return fmt.Errorf("LOG_FLUSH_INTERVAL must be greater than 0")
+	}
+
 	return nil
 }
 
@@ -160,12 +185,16 @@ func LoadConfig(useDynamicEnv bool) *AppConfig {
 	// Load sub-configs based on DbType
 	switch config.DbType {
 	case Postgres, MySQL, MsSQL, SQLite:
-		config.DbConfig = &DbConfig{}
+		if config.DbConfig == nil {
+			config.DbConfig = &DbConfig{}
+		}
 		if err := cleanenv.ReadEnv(config.DbConfig); err != nil {
 			log.Println("Failed to override database config from env, using defaults")
 		}
 	case MongoDb:
-		config.MongoConfig = &MongoConfig{}
+		if config.MongoConfig == nil {
+			config.MongoConfig = &MongoConfig{}
+		}
 		if err := cleanenv.ReadEnv(config.MongoConfig); err != nil {
 			log.Println("Failed to override MongoDB config from env, using defaults")
 		}
