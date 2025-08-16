@@ -207,7 +207,7 @@ func LoadConfig(useDynamicEnv bool) *AppConfig {
 	return &config
 }
 
-func LogConfig(cfg any, prefix string) {
+func LogConfigValues(cfg any, prefix string) {
 	val := reflect.ValueOf(cfg)
 	typ := reflect.TypeOf(cfg)
 
@@ -230,9 +230,9 @@ func LogConfig(cfg any, prefix string) {
 
 		// Recurse if nested struct or pointer to struct
 		if fieldVal.Kind() == reflect.Struct {
-			LogConfig(fieldVal.Interface(), prefix+fieldName+".")
+			LogConfigValues(fieldVal.Interface(), prefix+fieldName+".")
 		} else if fieldVal.Kind() == reflect.Ptr && fieldVal.Type().Elem().Kind() == reflect.Struct && !fieldVal.IsNil() {
-			LogConfig(fieldVal.Interface(), prefix+fieldName+".")
+			LogConfigValues(fieldVal.Interface(), prefix+fieldName+".")
 		} else {
 			if isSecret {
 				log.Printf("%s%s: *****", prefix, fieldName)
