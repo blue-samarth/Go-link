@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrorResponse defines the structure for error JSON responses
 type ErrorResponse struct {
 	Status    string      `json:"status"`
 	Code      string      `json:"code"`
@@ -19,50 +20,19 @@ type ErrorResponse struct {
 	Timestamp string      `json:"timestamp"`
 }
 
-var logger *zap.Logger
-
-// NoOpLogger creates a no-op logger to prevent nil pointer issues
-type NoOpLogger struct{}
-
-func (n *NoOpLogger) Error(msg string, fields ...zap.Field) {}
-func (n *NoOpLogger) Warn(msg string, fields ...zap.Field)  {}
-func (n *NoOpLogger) Info(msg string, fields ...zap.Field)  {}
-
-// Initialize with a global logger
-func InitLogger(l *zap.Logger) {
-	if l != nil {
-		logger = l
-	} else {
-		// Create a no-op logger if nil is passed
-		logger = zap.NewNop()
-	}
-}
-
-// getLogger returns the global logger or a no-op logger if not initialized
-func getLogger() *zap.Logger {
-	if logger != nil {
-		return logger
-	}
-	return zap.NewNop()
-}
-
 // getClientIP extracts the real client IP from request headers
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For can contain multiple IPs, take the first one
 		if idx := strings.Index(xff, ","); idx != -1 {
 			return strings.TrimSpace(xff[:idx])
 		}
 		return strings.TrimSpace(xff)
 	}
 
-	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return strings.TrimSpace(xri)
 	}
 
-	// Fall back to remote address
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip
 	}
@@ -70,7 +40,6 @@ func getClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-// validateMessage ensures message is not empty
 func validateMessage(message string) string {
 	if strings.TrimSpace(message) == "" {
 		return "An error occurred"
@@ -78,9 +47,8 @@ func validateMessage(message string) string {
 	return strings.TrimSpace(message)
 }
 
-// Generic error handler with context support and enhanced logging
+// HandleErrorWithContext provides enhanced error handling and logging
 func HandleErrorWithContext(ctx context.Context, w http.ResponseWriter, r *http.Request, status int, message string, err error, details ...interface{}) {
-	// Validate inputs
 	message = validateMessage(message)
 
 	var detail interface{}
@@ -98,7 +66,6 @@ func HandleErrorWithContext(ctx context.Context, w http.ResponseWriter, r *http.
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Enhanced logging with additional context
 	logFields := []zap.Field{
 		zap.Int("status", status),
 		zap.String("message", message),
@@ -112,17 +79,15 @@ func HandleErrorWithContext(ctx context.Context, w http.ResponseWriter, r *http.
 		logFields = append(logFields, zap.Any("details", detail))
 	}
 
-	// Add request ID if available in context
 	if reqID := ctx.Value("request_id"); reqID != nil {
 		logFields = append(logFields, zap.Any("request_id", reqID))
 	}
 
-	// Check for context cancellation
 	if ctx.Err() != nil {
 		logFields = append(logFields, zap.Error(ctx.Err()))
 	}
 
-	l := getLogger()
+	l := Logger() // ✅ Use the central logger
 	if err != nil {
 		logFields = append(logFields, zap.Error(err))
 		l.Error("HTTP error", logFields...)
@@ -130,19 +95,15 @@ func HandleErrorWithContext(ctx context.Context, w http.ResponseWriter, r *http.
 		l.Warn("HTTP warning", logFields...)
 	}
 
-	// Set headers and write response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
-	// Handle JSON encoding failures gracefully
 	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
-		l.Error("Failed to encode error response", 
+		l.Error("Failed to encode error response",
 			zap.Error(encErr),
 			zap.Int("original_status", status),
 			zap.String("original_message", message),
 		)
-		
-		// Fallback: write a simple error message
 		w.Header().Set("Content-Type", "text/plain")
 		if _, writeErr := w.Write([]byte("Internal server error: failed to encode response")); writeErr != nil {
 			l.Error("Failed to write fallback error response", zap.Error(writeErr))
