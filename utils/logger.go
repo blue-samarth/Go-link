@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"config"
+	"github.com/blue-samarth/go-link/config"
 )
 
 type LoggerConfig struct {
