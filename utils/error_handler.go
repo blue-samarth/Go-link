@@ -304,4 +304,6 @@ func mapStatusToCode(status int) string {
 		return "UNKNOWN_ERROR"
 	}
 
+	}
+	return "UNKNOWN_ERROR"
 }
