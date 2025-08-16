@@ -87,7 +87,7 @@ func HandleErrorWithContext(ctx context.Context, w http.ResponseWriter, r *http.
 		logFields = append(logFields, zap.Error(ctx.Err()))
 	}
 
-	l := Logger() // ✅ Use the central logger
+	l := Logger()
 	if err != nil {
 		logFields = append(logFields, zap.Error(err))
 		l.Error("HTTP error", logFields...)
@@ -303,4 +303,5 @@ func mapStatusToCode(status int) string {
 	default:
 		return "UNKNOWN_ERROR"
 	}
+
 }
