@@ -353,4 +353,5 @@ go test -bench=BenchmarkDbType -count=5 ./config | benchstat
 go test -fuzz=FuzzDbTypeInvalid -fuzztime=30s ./config
 ```
 
+
 This comprehensive test suite ensures the `DbType` validation is robust, secure, performant, and maintainable across all development scenarios.
